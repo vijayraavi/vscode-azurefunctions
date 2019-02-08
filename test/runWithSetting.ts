@@ -5,12 +5,12 @@
 
 import { getGlobalFuncExtensionSetting, updateGlobalSetting } from "../extension.bundle";
 
-export async function runWithSetting(key: string, value: string, callback: () => Promise<void>): Promise<void> {
-    const oldValue: string | undefined = getGlobalFuncExtensionSetting(key);
+export async function runWithSetting(key: string, value: string | undefined, callback: () => Promise<void>, prefix?: string): Promise<void> {
+    const oldValue: string | undefined = getGlobalFuncExtensionSetting(key, prefix);
     try {
-        await updateGlobalSetting(key, value);
+        await updateGlobalSetting(key, value, prefix);
         await callback();
     } finally {
-        await updateGlobalSetting(key, oldValue);
+        await updateGlobalSetting(key, oldValue, prefix);
     }
 }

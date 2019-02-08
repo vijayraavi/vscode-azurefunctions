@@ -10,50 +10,71 @@ import { ext } from '../extensionVariables';
 import { getFuncExtensionSetting } from '../ProjectSettings';
 import { cpUtils } from './cpUtils';
 
+enum Terminal {
+    bash,
+    cmd,
+    powershell
+}
+
 export namespace venvUtils {
     const bashAndCmdSeparator: string = ' && ';
     const powerShellSeparator: string = ' ; ';
 
-    export function convertToVenvTask(folder: WorkspaceFolder, ...commands: string[]): string {
-        const venvName: string | undefined = getFuncExtensionSetting<string>('pythonVenv', folder.uri.fsPath);
-        if (venvName) {
-            commands.unshift(getVenvActivateCommand(venvName));
-        }
-
+    export function convertToVenvTask(folder: WorkspaceFolder | undefined, command: string, platform: NodeJS.Platform = process.platform): string {
         let separator: string = bashAndCmdSeparator;
-        if (process.platform === Platform.Windows) {
+        let terminal: Terminal;
+        if (platform === Platform.Windows) {
+            terminal = Terminal.cmd;
+
             const config: WorkspaceConfiguration = workspace.getConfiguration();
             const shell: string | undefined = config.get('terminal.integrated.shell.windows');
-            if (shell && /(powershell|pwsh)/i.test(shell)) {
+            if (!shell || /(powershell|pwsh)/i.test(shell)) {
+                // powershell is the default if setting isn't defined
+                terminal = Terminal.powershell;
                 separator = powerShellSeparator;
+            } else if (/bash/i.test(shell)) {
+                terminal = Terminal.bash;
             }
+        } else {
+            terminal = Terminal.bash;
+        }
+
+        const commands: string[] = [command];
+        const venvName: string | undefined = getFuncExtensionSetting<string>('pythonVenv', folder && folder.uri.fsPath);
+        if (venvName) {
+            const venvActivatePath: string = getVenvActivatePath(venvName, terminal);
+            commands.unshift(getVenvActivateCommand(venvActivatePath, terminal));
         }
 
         return commands.join(separator);
     }
 
     export async function runPythonCommandInVenv(venvName: string, folderPath: string, command: string): Promise<void> {
-        // child_process uses cmd or bash, not PowerShell
-        command = getVenvActivateCommand(venvName) + bashAndCmdSeparator + command;
+        const terminal: Terminal = process.platform === Platform.Windows ? Terminal.cmd : Terminal.bash;
+        command = getVenvActivateCommand(venvName, terminal) + bashAndCmdSeparator + command;
         await cpUtils.executeCommand(ext.outputChannel, folderPath, command);
     }
 
-    export function getVenvActivatePath(venvName: string): string {
+    export function getVenvActivatePath(venvName: string, terminal?: Terminal): string {
+        if (terminal === undefined) {
+            terminal = process.platform === Platform.Windows ? Terminal.cmd : Terminal.bash;
+        }
+
+        const terminalPathJoin: (...p: string[]) => string = terminal === Terminal.bash ? path.posix.join : path.win32.join;
         switch (process.platform) {
             case Platform.Windows:
-                return path.join('.', venvName, 'Scripts', 'activate');
+                return terminalPathJoin('.', venvName, 'Scripts', 'activate');
             default:
-                return path.join('.', venvName, 'bin', 'activate');
+                return terminalPathJoin('.', venvName, 'bin', 'activate');
         }
     }
 
-    function getVenvActivateCommand(venvName: string): string {
-        const venvActivatePath: string = getVenvActivatePath(venvName);
-        switch (process.platform) {
-            case Platform.Windows:
-                return venvActivatePath;
-            default:
+    function getVenvActivateCommand(venvActivatePath: string, terminal: Terminal): string {
+        switch (terminal) {
+            case Terminal.bash:
                 return `. ${venvActivatePath}`;
+            default:
+                return venvActivatePath;
         }
     }
 }
