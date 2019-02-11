@@ -53,6 +53,7 @@ suiteTeardown(async function (this: IHookCallbackContext): Promise<void> {
         console.log(`Deleting test root folder (Attempt ${attempt}/${maxAttempts}).`);
         try {
             await fse.remove(testFolderPath);
+            break;
         } catch (error) {
             if (attempt < maxAttempts) {
                 console.log(parseError(error).message);
