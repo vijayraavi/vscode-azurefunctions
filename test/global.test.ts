@@ -9,7 +9,7 @@ import * as os from 'os';
 import * as path from 'path';
 import * as vscode from 'vscode';
 import { TestOutputChannel } from 'vscode-azureextensiondev';
-import { ext, getRandomHexString, getTemplateProvider, TemplateProvider, TemplateSource, TestUserInput } from '../extension.bundle';
+import { ext, getRandomHexString, getTemplateProvider, parseError, TemplateProvider, TemplateSource, TestUserInput } from '../extension.bundle';
 
 export let longRunningTestsEnabled: boolean;
 export const testFolderPath: string = path.join(os.tmpdir(), `azFuncTest${getRandomHexString()}`);
@@ -47,7 +47,20 @@ suiteSetup(async function (this: IHookCallbackContext): Promise<void> {
 
 suiteTeardown(async function (this: IHookCallbackContext): Promise<void> {
     this.timeout(90 * 1000);
-    await fse.remove(testFolderPath);
+
+    const maxAttempts: number = 5;
+    for (let attempt: number = 1; attempt <= maxAttempts; attempt += 1) {
+        console.log(`Deleting test root folder (Attempt ${attempt}/${maxAttempts}).`);
+        try {
+            await fse.remove(testFolderPath);
+        } catch (error) {
+            if (attempt < maxAttempts) {
+                console.log(parseError(error).message);
+            } else {
+                throw error;
+            }
+        }
+    }
 });
 
 export async function runForAllTemplateSources(callback: (source: TemplateSource, templates: TemplateProvider) => Promise<void>): Promise<void> {
